@@ -64,11 +64,12 @@ def collate_fn(batch):
             onset_range = 0
             fixlen = maxlen
 
-        X = np.zeros((batchsize,n_freq,fixlen))
-        mask = np.zeros((batchsize,1,fixlen))
+        X = np.zeros((batchsize, n_freq, fixlen))
+        mask = np.zeros((batchsize, 1, fixlen))
+        
         for b in range(batchsize):
-            X[b,:,0:melspec_list[s][b].shape[1]] = melspec_list[s][b]
-            mask[b,:,0:melspec_list[s][b].shape[1]] = 1.0
+            X[b, :, 0:melspec_list[s][b].shape[1]] = melspec_list[s][b]
+            mask[b, :, 0:melspec_list[s][b].shape[1]] = 1.0
 
         #X = torch.tensor(X)
         X_list.append(X)
