@@ -54,7 +54,7 @@ def logmelfilterbank(audio,
     # get mel basis
     fmin = 0 if fmin is None else fmin
     fmax = sampling_rate / 2 if fmax is None else fmax
-    mel_basis = librosa.filters.mel(sampling_rate, fft_size, num_mels, fmin, fmax)
+    mel_basis = librosa.filters.mel(sr=sampling_rate, n_fft=fft_size, n_mels=num_mels, fmin=fmin, fmax=fmax)
 
     return np.log10(np.maximum(eps, np.dot(spc, mel_basis.T)))
 
@@ -151,9 +151,6 @@ def main():
     #extract_melspec(*fargs_list[0])
     # test
 
-    #results = joblib.Parallel(n_jobs=-1)(
-    #    joblib.delayed(extract_melspec)(*f) for f in tqdm(fargs_list)
-    #)
     results = joblib.Parallel(n_jobs=16)(
         joblib.delayed(extract_melspec)(*f) for f in tqdm(fargs_list)
     )

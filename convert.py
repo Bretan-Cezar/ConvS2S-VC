@@ -9,7 +9,7 @@ import re
 import pickle
 from tqdm import tqdm
 import yaml
-
+import matplotlib.pyplot as plt
 import librosa
 import soundfile as sf
 from sklearn.preprocessing import StandardScaler
@@ -18,7 +18,10 @@ import net
 from extract_features import logmelfilterbank
 
 import sys
-sys.path.append(os.path.abspath("pwg"))
+
+# sys.path.append(os.path.abspath("pwg"))
+
+import pwg
 from pwg.parallel_wavegan.utils import load_model
 from pwg.parallel_wavegan.utils import read_hdf5
 
@@ -74,20 +77,23 @@ def find_newest_model_file(model_dir, tag):
     return '{}.{}.pt'.format(checkpoint,tag)
 
 
-def synthesis(melspec, pwg, pwg_config, savepath, device):
+def synthesis(melspec, model, pwg_config, savepath, device):
+
     ## Parallel WaveGAN / MelGAN
     melspec = torch.tensor(melspec, dtype=torch.float).to(device)
     #start = time.time()
-    x = pwg.inference(melspec).view(-1)
+    x = model.inference(melspec).view(-1)
     #elapsed_time = time.time() - start
     #rtf2 = elapsed_time/audio_len
     #print ("elapsed_time (waveform generation): {0}".format(elapsed_time) + "[sec]")
     #print ("real time factor (waveform generation): {0}".format(rtf2))
-    
-    # save as PCM 16 bit wav file
+     
+
     if not os.path.exists(os.path.dirname(savepath)):
         os.makedirs(os.path.dirname(savepath))
-    sf.write(savepath, x.detach().cpu().clone().numpy(), pwg_config["sampling_rate"], "PCM_16")
+    # save as PCM 16 bit wav file
+    sf.write(savepath, x.detach().cpu().numpy(), pwg_config['sampling_rate'], "PCM_16")
+
 
 def main():
     parser = argparse.ArgumentParser(description='Test ConvS2S-VC')
@@ -106,6 +112,7 @@ def main():
                         help='neural vocoder type name (e.g., parallel_wavegan.v1, melgan.v3.long)')
     parser.add_argument('--voc_dir', '-vdir', type=str, default='pwg/egs/arctic_4spk_flen64ms_fshift8ms/voc1', 
                         help='directory of trained neural vocoder')
+    parser.add_argument('--conversion_type', type=str, default='m2m', help='conversion type: m2m (default) / a2m')
     args = parser.parse_args()
 
     # Set up GPU
@@ -127,7 +134,6 @@ def main():
 
     num_mels = model_config['num_mels']
     n_spk = model_config['n_spk']
-    trg_spk_list = model_config['spk_list']
     zdim = model_config['zdim']
     mdim = model_config['mdim']
     kdim = model_config['kdim']
@@ -136,6 +142,7 @@ def main():
     reduction_factor = model_config['reduction_factor']
     pos_weight = model_config['pos_weight']
     attention_mode = args.attention_mode
+    conversion_type = args.conversion_type
 
     stat_filepath = args.stat
     melspec_scaler = StandardScaler()
@@ -147,15 +154,30 @@ def main():
         print('Stat file not found.')
 
     # Set up main model
-    enc = net.Encoder1(num_mels*reduction_factor,n_spk,hdim,zdim,kdim,num_layers)
-    predec = net.PreDecoder1(num_mels*reduction_factor,n_spk,hdim,zdim,kdim,num_layers)
-    postdec = net.PostDecoder1(zdim*2,n_spk,hdim,num_mels*reduction_factor,mdim,num_layers)
-    model = net.ConvS2S(enc, predec, postdec)
+
+    if conversion_type == 'm2m':
+
+        enc = net.Encoder1(num_mels*reduction_factor,n_spk,hdim,zdim,kdim,num_layers)
+        predec = net.PreDecoder1(num_mels*reduction_factor,n_spk,hdim,zdim,kdim,num_layers)
+        postdec = net.PostDecoder1(zdim*2,n_spk,hdim,num_mels*reduction_factor,mdim,num_layers)
+        model = net.ConvS2S(enc, predec, postdec)
+
+    elif conversion_type == 'a2m':
+
+        enc = net.EncoderAny(num_mels*reduction_factor,hdim,zdim,kdim,num_layers)
+        predec = net.PreDecoder1(num_mels*reduction_factor,n_spk,hdim,zdim,kdim,num_layers)
+        postdec = net.PostDecoder1(zdim*2,n_spk,hdim,num_mels*reduction_factor,mdim,num_layers)
+        model = net.ConvS2SAny2Many(enc, predec, postdec)
+    
+    else:
+        return
+
 
     tag = 'convs2s'
-    model_dir = os.path.join(args.model_rootdir,args.experiment_name)
-    mfilename = find_newest_model_file(model_dir, tag) if checkpoint <= 0 else '{}.{}.pt'.format(checkpoint,tag)
-    path = os.path.join(args.model_rootdir,args.experiment_name,mfilename)
+    model_dir = os.path.join(args.model_rootdir, args.experiment_name)
+    mfilename = find_newest_model_file(model_dir, tag) if checkpoint <= 0 else '{}.{}.pt'.format(checkpoint, tag)
+    path = os.path.join(args.model_rootdir, args.experiment_name, mfilename)
+
     if path is not None:
         convs2s_checkpoint = torch.load(path, map_location=device)
         model.load_state_dict(convs2s_checkpoint['model_state_dict'])
@@ -163,40 +185,82 @@ def main():
 
     model.to(device).eval()
 
+
     # Set up PWG
     vocoder = args.vocoder
     voc_dir = args.voc_dir
-    voc_yaml_path = os.path.join(voc_dir,'conf', '{}.yaml'.format(vocoder))
-    checkpointlist = listdir_ext(
-        os.path.join(voc_dir,'exp','train_nodev_all_{}'.format(vocoder)),'.pkl')
-    pwg_checkpoint = os.path.join(voc_dir,'exp',
-                                  'train_nodev_all_{}'.format(vocoder),
-                                  checkpointlist[-1]) # Find and use the newest checkpoint model.
+    voc_yaml_path = os.path.join(voc_dir, 'conf', f'{vocoder}.yaml')
+
+    checkpointlist = listdir_ext(os.path.join(voc_dir, 'exp', f'train_nodev_all_{vocoder}'), '.pkl')
+    pwg_checkpoint = os.path.join(voc_dir, 'exp', f'train_nodev_all_{vocoder}', checkpointlist[-1]) # Find and use the newest checkpoint model.
+
     print('vocoder: {}'.format(os.path.abspath(pwg_checkpoint)))
-    
+
     with open(voc_yaml_path) as f:
         pwg_config = yaml.load(f, Loader=yaml.Loader)
+
     pwg_config.update(vars(args))
     pwg = load_model(pwg_checkpoint, pwg_config)
     pwg.remove_weight_norm()
     pwg = pwg.eval().to(device)
 
-    src_spk_list = sorted(os.listdir(input_dir))
+
+    if conversion_type == 'm2m':
+
+        trg_spk_list = model_config['spk_list']
+
+        src_spk_list = sorted(os.listdir(input_dir))
+
+        for i, src_spk in enumerate(src_spk_list):
+
+            src_wav_dir = os.path.join(input_dir, src_spk)
+
+            for j, trg_spk in enumerate(trg_spk_list):
+
+                if src_spk != trg_spk:
+
+                    print('Converting {}2{}...'.format(src_spk, trg_spk))
+
+                    for n, src_wav_filename in enumerate(os.listdir(src_wav_dir)):
+
+                        src_wav_filepath = os.path.join(src_wav_dir, src_wav_filename)
+                        src_melspec = audio_transform(src_wav_filepath, melspec_scaler, data_config, device)
+
+                        conv_melspec, A, elapsed_time = model.inference(src_melspec, i, j, reduction_factor, pos_weight, attention_mode)
+                        conv_melspec = conv_melspec.T # n_frames x n_mels
+
+                        out_wavpath = os.path.join(args.out, args.experiment_name, attention_mode, "vocoder", '{}2{}'.format(src_spk,trg_spk), src_wav_filename)
+                        synthesis(conv_melspec, pwg, pwg_config, out_wavpath, device)
     
-    for i, src_spk in enumerate(src_spk_list):
-        src_wav_dir = os.path.join(input_dir, src_spk)
-        for j, trg_spk in enumerate(trg_spk_list):
-            if src_spk != trg_spk:
-                print('Converting {}2{}...'.format(src_spk, trg_spk))
-                for n, src_wav_filename in enumerate(os.listdir(src_wav_dir)):
-                    src_wav_filepath = os.path.join(src_wav_dir, src_wav_filename)
-                    src_melspec = audio_transform(src_wav_filepath, melspec_scaler, data_config, device)
 
-                    conv_melspec, A, elapsed_time = model.inference(src_melspec, i, j, reduction_factor, pos_weight, attention_mode)
-                    conv_melspec = conv_melspec.T # n_frames x n_mels
+    elif conversion_type == 'a2m':
 
-                    out_wavpath = os.path.join(args.out,args.experiment_name,attention_mode,vocoder,'{}2{}'.format(src_spk,trg_spk), src_wav_filename)
-                    synthesis(conv_melspec, pwg, pwg_config, out_wavpath, device)
+        trg_spk_list = model_config['trg_spk_list']
+
+        src_spk_list = sorted(os.listdir(input_dir))
+
+        all_spk_list = model_config['spk_list']
+
+        for _, src_spk in enumerate(src_spk_list):
+
+            src_wav_dir = os.path.join(input_dir, src_spk)
+
+            for _, trg_spk in enumerate(trg_spk_list):
+
+                if src_spk != trg_spk:
+                    
+                    print(f'Converting {src_spk}2{trg_spk}...')
+
+                    for n, src_wav_filename in enumerate(os.listdir(src_wav_dir)):
+
+                        src_wav_filepath = os.path.join(src_wav_dir, src_wav_filename)
+                        src_melspec = audio_transform(src_wav_filepath, melspec_scaler, data_config, device)
+
+                        conv_melspec, A, elapsed_time = model.inference(src_melspec, all_spk_list.index(trg_spk), reduction_factor, pos_weight, attention_mode)
+                        conv_melspec = conv_melspec.T # n_frames x n_mels
+
+                        out_wavpath = os.path.join(args.out, args.experiment_name, attention_mode, "vocoder", f'{src_spk}2{trg_spk}', src_wav_filename)
+                        synthesis(conv_melspec, pwg, pwg_config, out_wavpath, device)
 
 
 if __name__ == '__main__':

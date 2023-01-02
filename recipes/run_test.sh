@@ -11,11 +11,13 @@
 #     -a: Attention mode ("raw" (default), "forward", or "diagonal")
 #     -v: Vocoder type ("parallel_wavegan.v1" (default) or "hifigan.v1")
 
-db_dir="/path/to/dataset/test"
-dataset_name="mydataset"
+db_dir="./data/ARCTIC/test"
+dataset_name="cmu_arctic"
 attention_mode="raw"
-checkpoint=0
+checkpoint=200
 vocoder_type="parallel_wavegan.v1"
+exp_name="resume_epoch50"
+gpu=0
 
 while getopts "g:e:c:a:v:" opt; do
 	case $opt in
@@ -42,13 +44,15 @@ esac
 
 echo "Experiment name: ${exp_name}, Attention mode: ${attention_mode}, Vocoder: ${vocoder_type}"
 
+
 dconf_path="./dump/${dataset_name}/data_config.json"
 stat_path="./dump/${dataset_name}/stat.pkl"
 out_dir="./out/${dataset_name}"
 model_dir="./model/${dataset_name}"
-vocoder_dir="pwg/egs/arctic_4spk_flen64ms_fshift8ms/voc1"
+vocoder_dir="pwg/egs/arctic_5spk_flen64ms_fshift8ms/voc1"
 
-python convert.py -g ${gpu} \
+
+winpty python convert.py -g ${gpu} \
 	--input ${db_dir} \
 	--dataconf ${dconf_path} \
 	--stat ${stat_path} \
@@ -58,4 +62,5 @@ python convert.py -g ${gpu} \
 	--vocoder ${vocoder_type} \
 	--voc_dir ${vocoder_dir} \
 	--attention_mode ${attention_mode} \
-	--checkpoint ${checkpoint}
+	--checkpoint ${checkpoint} \
+	--conversion_type m2m
