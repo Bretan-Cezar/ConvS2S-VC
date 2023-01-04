@@ -342,6 +342,7 @@ class ConvS2S(nn.Module):
         
         return MainLoss, DALoss, A_np
 
+
     def inference(self, x_s, c_s, c_t, rf, pos_weight=1.0, attention_mode='raw'):
         start = time.time()
         
