@@ -9,13 +9,19 @@ import math
 import random
 
 def walk_files(root, extension):
+
     for path, dirs, files in os.walk(root):
+
         for file in files:
+
             if file.endswith(extension):
                 yield os.path.join(path, file)
 
+
 class MultiDomain_Dataset(Dataset):
+
     def __init__(self, *feat_dirs):
+
         self.n_domain = len(feat_dirs)
         self.filenames_all = [[os.path.join(d,t) for t in sorted(os.listdir(d))] for d in feat_dirs]
         #self.filenames_all = [[t for t in walk_files(d, '.h5')] for d in feat_dirs]
@@ -26,12 +32,18 @@ class MultiDomain_Dataset(Dataset):
         return min(len(f) for f in self.filenames_all)
 
     def __getitem__(self, idx):
+
         melspec_list = []
+
         for d in range(self.n_domain):
+
             with h5py.File(self.filenames_all[d][idx], "r") as f:
                 melspec = f["melspec"][()]  # n_freq x n_time
+
             melspec_list.append(melspec)
+
         return melspec_list
+
 
 def collate_fn(batch):
     max_of_maxlen = 2048
@@ -43,6 +55,7 @@ def collate_fn(batch):
     batchsize = len(batch)
     n_spk = len(batch[0])
     melspec_list = [[batch[b][s] for b in range(batchsize)] for s in range(n_spk)]
+
     #melspec_list[s][b]: melspec (n_freq x n_frame)
     #s: speaker ID
     #b: batch size
@@ -51,10 +64,14 @@ def collate_fn(batch):
 
     X_list = []
     mask_list = []
+
     for s in range(n_spk):
-        maxlen=0
+
+        maxlen = 0
+        
         for b in range(batchsize):
-            if maxlen<melspec_list[s][b].shape[1]:
+
+            if maxlen < melspec_list[s][b].shape[1]:
                 maxlen = melspec_list[s][b].shape[1]
     
         if maxlen > max_of_maxlen:
@@ -68,6 +85,7 @@ def collate_fn(batch):
         mask = np.zeros((batchsize, 1, fixlen))
         
         for b in range(batchsize):
+
             X[b, :, 0:melspec_list[s][b].shape[1]] = melspec_list[s][b]
             mask[b, :, 0:melspec_list[s][b].shape[1]] = 1.0
 

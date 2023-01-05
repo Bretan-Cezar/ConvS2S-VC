@@ -2,7 +2,7 @@ trg_dir="./data/ARCTIC/test"
 conv_dir="./out/cmu_arctic"
 att_type="raw"
 exp_name="resume_epoch50"
-spk_pair="clb2bdl"
+spk_pair="aew2bdl"
 sr=16000
 
 winpty py ./compute_mcd.py --target_directory ${trg_dir} \

@@ -202,6 +202,9 @@ def TrainA2M(model: net.ConvS2SAny2Many, epochs, train_loader, optimizer, model_
         b = 0
         w_da = w_da_init * np.exp(-epoch/50.0)
 
+        # List of speaker pairs
+        spk_pair_list = prod_a2m(spk_list, src_spk_list, trg_spk_list)
+
         for X_list, mask_list in train_loader:
 
             n_spk = len(X_list)
@@ -212,9 +215,6 @@ def TrainA2M(model: net.ConvS2SAny2Many, epochs, train_loader, optimizer, model_
             for s in range(n_spk):
                 xin.append(torch.tensor(X_list[s]).to(device, dtype=torch.float))
                 mask.append(torch.tensor(mask_list[s]).to(device, dtype=torch.float))
-
-            # List of speaker pairs
-            spk_pair_list = prod_a2m(spk_list, src_spk_list, trg_spk_list)
 
             n_spk_pair = len(spk_pair_list)
 
