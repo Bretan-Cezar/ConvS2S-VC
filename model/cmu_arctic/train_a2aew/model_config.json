@@ -1,0 +1,36 @@
+{
+    "num_mels": 80,
+    "zdim": 512,
+    "kdim": 512,
+    "mdim": 512,
+    "hdim": 32,
+    "num_layers": 8,
+    "lrate": 5e-05,
+    "w_da": 2000.0,
+    "pos_weight": 1.0,
+    "dropout_ratio": 0.1,
+    "gauss_width_da": 0.3,
+    "identity_mapping": true,
+    "reduction_factor": 4,
+    "epochs": 200,
+    "BatchSize": 16,
+    "n_spk": 6,
+    "spk_list": [
+        "aew",
+        "ahw",
+        "bdl",
+        "clb",
+        "eey",
+        "ljm"
+    ],
+    "src_spk_list": [
+        "ahw",
+        "bdl",
+        "clb",
+        "eey",
+        "ljm"
+    ],
+    "trg_spk_list": [
+        "aew"
+    ]
+}

@@ -42,7 +42,8 @@ def audio_transform(wav_filepath, scaler, kwargs, device):
         audio, _ = librosa.effects.trim(audio, top_db=top_db, frame_length=2048, hop_length=512)
     if fs != fs_:
         #print('resampling.')
-        audio = librosa.resample(audio, fs_, fs)
+        audio = librosa.resample(audio, orig_sr=fs_, target_sr=fs)
+
     melspec_raw = logmelfilterbank(audio,fs, fft_size=flen,hop_size=fshift,
                                     fmin=fmin, fmax=fmax, num_mels=num_mels)
     melspec_raw = melspec_raw.astype(np.float32) # n_frame x n_mels
@@ -226,11 +227,12 @@ def main():
                         src_wav_filepath = os.path.join(src_wav_dir, src_wav_filename)
                         src_melspec = audio_transform(src_wav_filepath, melspec_scaler, data_config, device)
 
-                        conv_melspec, A, elapsed_time = model.inference(src_melspec, i, j, reduction_factor, pos_weight, attention_mode)
-                        conv_melspec = conv_melspec.T # n_frames x n_mels
+                        with torch.no_grad():
+                            conv_melspec, A, elapsed_time = model.inference(src_melspec, i, j, reduction_factor, pos_weight, attention_mode)
+                            conv_melspec = conv_melspec.T # n_frames x n_mels
 
-                        out_wavpath = os.path.join(args.out, args.experiment_name, attention_mode, "vocoder", '{}2{}'.format(src_spk,trg_spk), src_wav_filename)
-                        synthesis(conv_melspec, pwg, pwg_config, out_wavpath, device)
+                            out_wavpath = os.path.join(args.out, args.experiment_name, attention_mode, "vocoder", '{}2{}'.format(src_spk,trg_spk), src_wav_filename)
+                            synthesis(conv_melspec, pwg, pwg_config, out_wavpath, device)
     
 
     elif conversion_type == 'a2m':
